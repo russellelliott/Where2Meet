@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useState, useRef } from "react";
-import { GoogleMap, LoadScript, Polygon, Autocomplete } from "@react-google-maps/api";
+import { GoogleMap, LoadScript, Polygon, Autocomplete, Marker, InfoWindow } from "@react-google-maps/api";
+import martinez from 'polygon-clipping';
 
 const containerStyle = {
   width: "100%",
@@ -10,10 +11,6 @@ const center = {
   lat: 37.7749,
   lng: -122.4194
 };
-
-
-
-// Azure API and map center
 
 // Default center
 const DEFAULT_CENTER = { lat: 37.7749, lng: -122.4194 };
@@ -39,6 +36,18 @@ function geoJsonToGooglePolygonCoords(geoJson) {
   return geoJson.features[0].geometry.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
 }
 
+function geoJsonToPolygonClippingFormat(geoJson) {
+  if (
+    !geoJson ||
+    !geoJson.features ||
+    !geoJson.features[0] ||
+    !geoJson.features[0].geometry ||
+    !geoJson.features[0].geometry.coordinates
+  ) {
+    return null;
+  }
+  return geoJson.features[0].geometry.coordinates;
+}
 
 const polygonOptionsA = {
   fillColor: "#FF0000",
@@ -52,6 +61,7 @@ const polygonOptionsA = {
   geodesic: false,
   zIndex: 1
 };
+
 const polygonOptionsB = {
   fillColor: "#0000FF",
   fillOpacity: 0.35,
@@ -65,13 +75,27 @@ const polygonOptionsB = {
   zIndex: 1
 };
 
-
+const intersectionPolygonOptions = {
+  fillColor: "#00FF00",
+  fillOpacity: 0.5,
+  strokeColor: "#00AA00",
+  strokeOpacity: 1,
+  strokeWeight: 3,
+  clickable: false,
+  draggable: false,
+  editable: false,
+  geodesic: false,
+  zIndex: 2
+};
 
 function MapWithIsochrones() {
   const [locationA, setLocationA] = useState(null);
   const [locationB, setLocationB] = useState(null);
   const [isochroneA, setIsochroneA] = useState(null);
   const [isochroneB, setIsochroneB] = useState(null);
+  const [intersection, setIntersection] = useState(null);
+  const [citiesInIntersection, setCitiesInIntersection] = useState([]);
+  const [selectedCity, setSelectedCity] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [travelTime, setTravelTime] = useState(null);
@@ -89,6 +113,7 @@ function MapWithIsochrones() {
       });
     }
   };
+
   const onPlaceChangedB = () => {
     const place = autocompleteB.current.getPlace();
     if (place && place.geometry && place.geometry.location) {
@@ -174,12 +199,121 @@ function MapWithIsochrones() {
     fetchIsochrones();
   }, [locationA, locationB, travelTime]);
 
+  // Calculate intersection and find cities when both isochrones are available
+  useEffect(() => {
+    async function calculateIntersectionAndFindCities() {
+      if (!isochroneA || !isochroneB) {
+        setIntersection(null);
+        setCitiesInIntersection([]);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Convert to polygon-clipping format
+        const polyA = geoJsonToPolygonClippingFormat(isochroneA);
+        const polyB = geoJsonToPolygonClippingFormat(isochroneB);
+
+        if (!polyA || !polyB) {
+          setError("Could not process isochrone polygons for intersection");
+          setLoading(false);
+          return;
+        }
+
+        // Calculate intersection
+        const intersectionResult = martinez.intersection(polyA, polyB);
+        console.log('Intersection result:', intersectionResult);
+        
+        if (intersectionResult && intersectionResult.length > 0) {
+          // Convert intersection back to GeoJSON format for display
+          const intersectionGeoJson = {
+            type: "FeatureCollection",
+            features: intersectionResult.map(polygon => ({
+              type: "Feature",
+              geometry: { type: "Polygon", coordinates: polygon },
+              properties: {}
+            }))
+          };
+          setIntersection(intersectionGeoJson);
+
+          // Find cities within the intersection using Azure Maps
+          // Use only the intersection polygons, not the original isochrones
+          const cities = await fetchCities(intersectionResult);
+          setCitiesInIntersection(cities);
+        } else {
+          console.log('No intersection found');
+          setIntersection(null);
+          setCitiesInIntersection([]);
+        }
+      } catch (err) {
+        setError("Error calculating intersection: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    calculateIntersectionAndFindCities();
+  }, [isochroneA, isochroneB]);
+
+  // polygons: [poly1, poly2], each is an array of rings
+  const fetchCities = async (polygons) => {
+    const subscriptionKey = getAzureMapsKey();
+    if (!subscriptionKey) {
+      throw new Error("Azure Maps subscription key missing");
+    }
+    // Compose GeometryCollection as required by Azure Maps
+    const geometryCollection = {
+      geometry: {
+        type: 'GeometryCollection',
+        geometries: polygons.map(coords => ({
+          type: 'Polygon',
+          coordinates: coords
+        }))
+      }
+    };
+    try {
+      const response = await fetch(
+        `https://atlas.microsoft.com/search/geometry/json?api-version=1.0&query=city&subscription-key=${subscriptionKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geometryCollection)
+        }
+      );
+      const json = await response.json();
+      return json.results || [];
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
+    }
+  };
+
   const polygonPathA = useMemo(() => geoJsonToGooglePolygonCoords(isochroneA), [isochroneA]);
   const polygonPathB = useMemo(() => geoJsonToGooglePolygonCoords(isochroneB), [isochroneB]);
+  
+  const intersectionPaths = useMemo(() => {
+    if (!intersection || !intersection.features) return [];
+    return intersection.features.map(feature => 
+      feature.geometry.coordinates[0].map(([lng, lat]) => ({ lat, lng }))
+    );
+  }, [intersection]);
+
+  // Remove duplicate cities
+  const uniqueCities = useMemo(() => {
+    const seen = new Set();
+    return citiesInIntersection.filter(city => {
+      const key = `${city.address?.municipality}|${city.address?.countryCode}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [citiesInIntersection]);
 
   return (
     <LoadScript googleMapsApiKey={getGoogleMapsKey()} libraries={["places"]}>
-      <div style={{ position: "absolute", zIndex: 200, background: "#fff", padding: 10, left: 10, top: 10, borderRadius: 8, boxShadow: "0 2px 8px #0002" }}>
+      <div style={{ position: "absolute", zIndex: 200, background: "#fff", padding: 10, left: 10, top: 10, borderRadius: 8, boxShadow: "0 2px 8px #0002", maxWidth: 300 }}>
         <div>
           <label>City A: </label>
           <Autocomplete onLoad={ac => (autocompleteA.current = ac)} onPlaceChanged={onPlaceChangedA}>
@@ -197,12 +331,85 @@ function MapWithIsochrones() {
             Travel time: {Math.round(travelTime / 60)} min
           </div>
         )}
+        {intersection && (
+          <div style={{ marginTop: 8 }}>
+            <strong>Cities in meeting zone ({uniqueCities.length}):</strong>
+            <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 4, fontSize: '12px' }}>
+              {uniqueCities.map((city, index) => (
+                <div key={index} style={{ margin: '2px 0', cursor: 'pointer', padding: '2px', backgroundColor: selectedCity === city ? '#e0e0e0' : 'transparent' }}
+                     onClick={() => setSelectedCity(selectedCity === city ? null : city)}>
+                  {city.address?.municipality}, {city.address?.countryCode}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      <div style={{ position: "absolute", zIndex: 200, background: "#fff", padding: 10, right: 10, top: 10, borderRadius: 8, boxShadow: "0 2px 8px #0002", fontSize: '12px' }}>
+        <div><span style={{ color: '#FF0000', fontWeight: 'bold' }}>■</span> City A reachable area</div>
+        <div><span style={{ color: '#0000FF', fontWeight: 'bold' }}>■</span> City B reachable area</div>
+        {intersection && <div><span style={{ color: '#00FF00', fontWeight: 'bold' }}>■</span> Meeting zone</div>}
+      </div>
+
       <GoogleMap mapContainerStyle={containerStyle} center={locationA || locationB || DEFAULT_CENTER} zoom={8}>
         {loading && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px'}}>Loading...</div>}
         {error && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px',color:'red'}}>Error: {error}</div>}
+        
         {polygonPathA.length > 0 && <Polygon paths={polygonPathA} options={polygonOptionsA} />}
         {polygonPathB.length > 0 && <Polygon paths={polygonPathB} options={polygonOptionsB} />}
+        
+        {intersectionPaths.map((path, index) => (
+          <Polygon key={`intersection-${index}`} paths={path} options={intersectionPolygonOptions} />
+        ))}
+
+        {uniqueCities.map((city, index) => {
+          const lon = city.position?.lon ?? city.position?.[0];
+          const lat = city.position?.lat ?? city.position?.[1];
+          
+          if (lat === undefined || lon === undefined) return null;
+          
+          return (
+            <Marker
+              key={index}
+              position={{ lat, lng: lon }}
+              onClick={() => setSelectedCity(selectedCity === city ? null : city)}
+              icon={{
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                  <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="10" cy="10" r="8" fill="#00AA00" stroke="#ffffff" stroke-width="2"/>
+                    <circle cx="10" cy="10" r="3" fill="#ffffff"/>
+                  </svg>
+                `),
+                scaledSize: new window.google.maps.Size(20, 20),
+                anchor: new window.google.maps.Point(10, 10)
+              }}
+            />
+          );
+        })}
+
+        {selectedCity && (() => {
+          const lon = selectedCity.position?.lon ?? selectedCity.position?.[0];
+          const lat = selectedCity.position?.lat ?? selectedCity.position?.[1];
+          
+          if (lat === undefined || lon === undefined) return null;
+          
+          return (
+            <InfoWindow
+              position={{ lat, lng: lon }}
+              onCloseClick={() => setSelectedCity(null)}
+            >
+              <div>
+                <h4 style={{ margin: '0 0 5px 0' }}>
+                  {selectedCity.address?.municipality}, {selectedCity.address?.countryCode}
+                </h4>
+                <p style={{ margin: 0, fontSize: '12px' }}>
+                  {selectedCity.address?.freeformAddress}
+                </p>
+              </div>
+            </InfoWindow>
+          );
+        })()}
       </GoogleMap>
     </LoadScript>
   );
