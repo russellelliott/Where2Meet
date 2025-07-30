@@ -386,6 +386,11 @@ function MapWithIsochrones() {
             Travel time: {Math.round(travelTime / 60)} min
           </div>
         )}
+        {error === "Could not get travel time between cities" && (
+          <div style={{ marginTop: 8, color: 'red', fontWeight: 500 }}>
+            Error: {error}
+          </div>
+        )}
         {intersection && (
           <div style={{ marginTop: 8 }}>
             <strong>Cities in meeting zone ({uniqueCities.length}):</strong>
@@ -409,7 +414,10 @@ function MapWithIsochrones() {
 
       <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={8}>
         {loading && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px'}}>Loading...</div>}
-        {error && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px',color:'red'}}>Error: {error}</div>}
+        {/* Only show other errors (not travel time error) over the map */}
+        {error && error !== "Could not get travel time between cities" && (
+          <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px',color:'red'}}>Error: {error}</div>
+        )}
         
         {polygonPathA.length > 0 && <Polygon paths={polygonPathA} options={polygonOptionsA} />}
         {polygonPathB.length > 0 && <Polygon paths={polygonPathB} options={polygonOptionsB} />}
