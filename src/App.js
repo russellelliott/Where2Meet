@@ -274,16 +274,32 @@ function MapWithIsochrones() {
       }
     };
     try {
-      const response = await fetch(
-        `https://atlas.microsoft.com/search/geometry/json?api-version=1.0&query=city&subscription-key=${subscriptionKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(geometryCollection)
+      // Combine queries for city, town, village, and populated place
+      const queries = ["city", "town", "village", "populated place"];
+      let allResults = [];
+      for (const query of queries) {
+        const response = await fetch(
+          `https://atlas.microsoft.com/search/geometry/json?api-version=1.0&query=${encodeURIComponent(query)}&limit=100&subscription-key=${subscriptionKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(geometryCollection)
+          }
+        );
+        const json = await response.json();
+        if (json.results) {
+          allResults = allResults.concat(json.results);
         }
-      );
-      const json = await response.json();
-      return json.results || [];
+      }
+      // Deduplicate by municipality and countryCode
+      const seen = new Set();
+      const deduped = allResults.filter(city => {
+        const key = `${city.address?.municipality}|${city.address?.countryCode}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return deduped;
     } catch (error) {
       console.error('Fetch error:', error);
       throw error;
