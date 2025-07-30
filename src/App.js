@@ -4,7 +4,7 @@ import martinez from 'polygon-clipping';
 
 const containerStyle = {
   width: "100%",
-  height: "500px"
+  height: "700px" // Increased from 500px to 700px
 };
 
 const center = {
@@ -47,6 +47,30 @@ function geoJsonToPolygonClippingFormat(geoJson) {
     return null;
   }
   return geoJson.features[0].geometry.coordinates;
+}
+
+// Function to calculate the center of the intersection polygon
+function calculatePolygonCenter(polygonPaths) {
+  if (!polygonPaths || polygonPaths.length === 0) return null;
+  
+  let totalLat = 0;
+  let totalLng = 0;
+  let totalPoints = 0;
+  
+  polygonPaths.forEach(path => {
+    path.forEach(point => {
+      totalLat += point.lat;
+      totalLng += point.lng;
+      totalPoints++;
+    });
+  });
+  
+  if (totalPoints === 0) return null;
+  
+  return {
+    lat: totalLat / totalPoints,
+    lng: totalLng / totalPoints
+  };
 }
 
 const polygonOptionsA = {
@@ -316,6 +340,21 @@ function MapWithIsochrones() {
     );
   }, [intersection]);
 
+  // Calculate map center - prioritize meeting zone center when available
+  const mapCenter = useMemo(() => {
+    if (intersectionPaths.length > 0) {
+      const center = calculatePolygonCenter(intersectionPaths);
+      if (center) return center;
+    }
+    if (locationA && locationB) {
+      return {
+        lat: (locationA.lat + locationB.lat) / 2,
+        lng: (locationA.lng + locationB.lng) / 2
+      };
+    }
+    return locationA || locationB || DEFAULT_CENTER;
+  }, [intersectionPaths, locationA, locationB]);
+
   // Remove duplicate cities
   const uniqueCities = useMemo(() => {
     const seen = new Set();
@@ -350,7 +389,7 @@ function MapWithIsochrones() {
         {intersection && (
           <div style={{ marginTop: 8 }}>
             <strong>Cities in meeting zone ({uniqueCities.length}):</strong>
-            <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 4, fontSize: '12px' }}>
+            <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 4, fontSize: '12px' }}>
               {uniqueCities.map((city, index) => (
                 <div key={index} style={{ margin: '2px 0', cursor: 'pointer', padding: '2px', backgroundColor: selectedCity === city ? '#e0e0e0' : 'transparent' }}
                      onClick={() => setSelectedCity(selectedCity === city ? null : city)}>
@@ -368,7 +407,7 @@ function MapWithIsochrones() {
         {intersection && <div><span style={{ color: '#00FF00', fontWeight: 'bold' }}>■</span> Meeting zone</div>}
       </div>
 
-      <GoogleMap mapContainerStyle={containerStyle} center={locationA || locationB || DEFAULT_CENTER} zoom={8}>
+      <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={8}>
         {loading && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px'}}>Loading...</div>}
         {error && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px',color:'red'}}>Error: {error}</div>}
         
