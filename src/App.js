@@ -136,7 +136,7 @@ function MapWithIsochrones() {
         return;
       }
       // Time budget: slightly more than half the travel time
-      const timeBudget = Math.ceil(travelTime / 2 + 300); // +5 min buffer
+      const timeBudget = Math.ceil(travelTime / 2 + 900); // +15 min buffer
       const urlA = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationA.lat},${locationA.lng}&timeBudgetInSec=${timeBudget}`;
       const urlB = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationB.lat},${locationB.lng}&timeBudgetInSec=${timeBudget}`;
       try {
