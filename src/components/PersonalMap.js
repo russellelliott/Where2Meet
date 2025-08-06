@@ -334,7 +334,14 @@ function PersonalMap() {
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button 
                   onClick={() => {
-                    const url = `https://www.google.com/maps?q=${selectedMarker.position.lat},${selectedMarker.position.lng}`;
+                    let url;
+                    if (selectedMarker.placeId) {
+                      // Use place ID for actual place page
+                      url = `https://www.google.com/maps/place/?q=place_id:${selectedMarker.placeId}`;
+                    } else {
+                      // Fallback to coordinates for dropped pins without place ID
+                      url = `https://www.google.com/maps?q=${selectedMarker.position.lat},${selectedMarker.position.lng}`;
+                    }
                     window.open(url, '_blank');
                   }}
                   style={{
