@@ -97,6 +97,8 @@ function PersonalMap() {
             };
             
             setMarkers(prev => [...prev, newMarker]);
+            // Automatically select the newly created marker to show InfoWindow
+            setSelectedMarker(newMarker);
           } else {
             // If geocoding fails, still create a marker with basic info
             const newMarker = {
@@ -110,6 +112,8 @@ function PersonalMap() {
             };
             
             setMarkers(prev => [...prev, newMarker]);
+            // Automatically select the newly created marker to show InfoWindow
+            setSelectedMarker(newMarker);
           }
           setLoading(false);
         }
@@ -128,6 +132,8 @@ function PersonalMap() {
       };
       
       setMarkers(prev => [...prev, newMarker]);
+      // Automatically select the newly created marker to show InfoWindow
+      setSelectedMarker(newMarker);
       setLoading(false);
     }
   }, []);
@@ -325,21 +331,41 @@ function PersonalMap() {
               <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
                 {selectedMarker.source === "autocomplete" ? "Added via search" : "Dropped pin"}
               </div>
-              <button 
-                onClick={() => removeMarker(selectedMarker.id)}
-                style={{
-                  padding: "4px 8px",
-                  fontSize: "10px",
-                  background: "#ff4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  cursor: "pointer",
-                  width: "100%"
-                }}
-              >
-                🗑️ Delete Marker
-              </button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button 
+                  onClick={() => {
+                    const url = `https://www.google.com/maps?q=${selectedMarker.position.lat},${selectedMarker.position.lng}`;
+                    window.open(url, '_blank');
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "10px",
+                    background: "#4285f4",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    flex: 1
+                  }}
+                >
+                  🗺️ Google Maps
+                </button>
+                <button 
+                  onClick={() => removeMarker(selectedMarker.id)}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "10px",
+                    background: "#ff4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    flex: 1
+                  }}
+                >
+                  🗑️ Delete
+                </button>
+              </div>
             </div>
           </InfoWindow>
         )}
