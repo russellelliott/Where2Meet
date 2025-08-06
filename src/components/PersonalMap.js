@@ -58,11 +58,14 @@ function PersonalMap() {
         address: place.formatted_address || "",
         types: place.types || [],
         placeId: place.place_id,
-        source: "autocomplete"
+        source: "autocomplete",
+        notes: ""
       };
       
       setMarkers(prev => [...prev, newMarker]);
       setMapCenter(newMarker.position);
+      // Automatically select the newly created marker to show InfoWindow
+      setSelectedMarker(newMarker);
       
       // Clear the input
       const input = document.querySelector('input[placeholder="Search for a place..."]');
@@ -93,7 +96,8 @@ function PersonalMap() {
               address: place.formatted_address || "",
               types: place.types || [],
               placeId: place.place_id,
-              source: "dropped"
+              source: "dropped",
+              notes: ""
             };
             
             setMarkers(prev => [...prev, newMarker]);
@@ -108,7 +112,8 @@ function PersonalMap() {
               address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
               types: [],
               placeId: null,
-              source: "dropped"
+              source: "dropped",
+              notes: ""
             };
             
             setMarkers(prev => [...prev, newMarker]);
@@ -128,7 +133,8 @@ function PersonalMap() {
         address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
         types: [],
         placeId: null,
-        source: "dropped"
+        source: "dropped",
+        notes: ""
       };
       
       setMarkers(prev => [...prev, newMarker]);
@@ -137,6 +143,17 @@ function PersonalMap() {
       setLoading(false);
     }
   }, []);
+
+  // Update marker notes
+  const updateMarkerNotes = (markerId, notes) => {
+    setMarkers(prev => prev.map(marker => 
+      marker.id === markerId ? { ...marker, notes } : marker
+    ));
+    // Update selectedMarker to keep it in sync
+    if (selectedMarker && selectedMarker.id === markerId) {
+      setSelectedMarker(prev => ({ ...prev, notes }));
+    }
+  };
 
   // Remove a marker
   const removeMarker = (markerId) => {
@@ -240,6 +257,11 @@ function PersonalMap() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: "bold" }}>{marker.name}</div>
                 <div style={{ color: "#666" }}>{marker.address}</div>
+                {marker.notes && (
+                  <div style={{ color: "#888", fontSize: "10px", fontStyle: "italic", marginTop: "2px" }}>
+                    📝 {marker.notes.length > 50 ? marker.notes.substring(0, 50) + "..." : marker.notes}
+                  </div>
+                )}
                 <div style={{ color: "#999", fontSize: "10px" }}>
                   {marker.source === "autocomplete" ? "📍 Search" : "📌 Dropped"}
                 </div>
@@ -316,7 +338,7 @@ function PersonalMap() {
             position={selectedMarker.position}
             onCloseClick={() => setSelectedMarker(null)}
           >
-            <div style={{ maxWidth: 200 }}>
+            <div style={{ maxWidth: 250 }}>
               <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>
                 {selectedMarker.name}
               </h4>
@@ -331,6 +353,30 @@ function PersonalMap() {
               <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
                 {selectedMarker.source === "autocomplete" ? "Added via search" : "Dropped pin"}
               </div>
+              
+              {/* Notes Section */}
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>
+                  Personal Notes:
+                </label>
+                <textarea
+                  value={selectedMarker.notes}
+                  onChange={(e) => updateMarkerNotes(selectedMarker.id, e.target.value)}
+                  placeholder="Add your notes about this place..."
+                  style={{
+                    width: '100%',
+                    height: '50px',
+                    fontSize: '11px',
+                    padding: '4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '3px',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+              
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button 
                   onClick={() => {
