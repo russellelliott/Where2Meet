@@ -75,6 +75,12 @@ function PersonalMap() {
 
   // Handle map clicks to drop pins
   const onMapClick = useCallback(async (event) => {
+    // If there's a selected marker, close it first without creating a new marker
+    if (selectedMarker) {
+      setSelectedMarker(null);
+      return;
+    }
+
     const lat = event.latLng.lat();
     const lng = event.latLng.lng();
     
@@ -142,7 +148,7 @@ function PersonalMap() {
       setSelectedMarker(newMarker);
       setLoading(false);
     }
-  }, []);
+  }, [selectedMarker]);
 
   // Update marker notes
   const updateMarkerNotes = (markerId, notes) => {
