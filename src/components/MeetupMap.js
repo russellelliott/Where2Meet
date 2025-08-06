@@ -431,7 +431,17 @@ function MeetupMap() {
         {intersection && <div><span style={{ color: '#00FF00', fontWeight: 'bold' }}>■</span> Meeting zone</div>}
       </div>
 
-      <GoogleMap mapContainerStyle={containerStyle} center={mapCenter} zoom={8}>
+      <GoogleMap 
+        mapContainerStyle={containerStyle} 
+        center={mapCenter} 
+        zoom={8}
+        onClick={() => {
+          // Close the InfoWindow if a city is selected
+          if (selectedCity) {
+            setSelectedCity(null);
+          }
+        }}
+      >
         {loading && <div style={{position:'absolute',zIndex:100,background:'#fff',padding:'10px'}}>Loading...</div>}
         {/* Only show other errors (not travel time error) over the map */}
         {error && error !== "Could not get travel time between cities" && (
