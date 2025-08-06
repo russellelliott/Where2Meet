@@ -318,13 +318,28 @@ function PersonalMap() {
                 {selectedMarker.address}
               </p>
               {selectedMarker.types && selectedMarker.types.length > 0 && (
-                <div style={{ fontSize: '10px', color: '#999' }}>
+                <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
                   Types: {selectedMarker.types.slice(0, 3).join(', ')}
                 </div>
               )}
-              <div style={{ fontSize: '10px', color: '#999', marginTop: 4 }}>
+              <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
                 {selectedMarker.source === "autocomplete" ? "Added via search" : "Dropped pin"}
               </div>
+              <button 
+                onClick={() => removeMarker(selectedMarker.id)}
+                style={{
+                  padding: "4px 8px",
+                  fontSize: "10px",
+                  background: "#ff4444",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  width: "100%"
+                }}
+              >
+                🗑️ Delete Marker
+              </button>
             </div>
           </InfoWindow>
         )}
