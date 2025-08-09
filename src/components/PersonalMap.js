@@ -58,7 +58,6 @@ function PersonalMap() {
         address: place.formatted_address || "",
         types: place.types || [],
         placeId: place.place_id,
-        source: "autocomplete",
         notes: ""
       };
       
@@ -102,7 +101,6 @@ function PersonalMap() {
               address: place.formatted_address || "",
               types: place.types || [],
               placeId: place.place_id,
-              source: "dropped",
               notes: ""
             };
             
@@ -139,7 +137,6 @@ function PersonalMap() {
         address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
         types: [],
         placeId: null,
-        source: "dropped",
         notes: ""
       };
       
@@ -268,9 +265,6 @@ function PersonalMap() {
                     📝 {marker.notes.length > 50 ? marker.notes.substring(0, 50) + "..." : marker.notes}
                   </div>
                 )}
-                <div style={{ color: "#999", fontSize: "10px" }}>
-                  {marker.source === "autocomplete" ? "📍 Search" : "📌 Dropped"}
-                </div>
               </div>
               <button 
                 onClick={(e) => {
@@ -321,21 +315,6 @@ function PersonalMap() {
             key={marker.id}
             position={marker.position}
             onClick={() => setSelectedMarker(selectedMarker?.id === marker.id ? null : marker)}
-            icon={{
-              url: marker.source === "autocomplete" 
-                ? 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#4285f4"/>
-                    </svg>
-                  `)
-                : 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#ea4335"/>
-                    </svg>
-                  `),
-              scaledSize: new window.google.maps.Size(24, 24),
-              anchor: new window.google.maps.Point(12, 24)
-            }}
           />
         ))}
 
@@ -357,7 +336,7 @@ function PersonalMap() {
                 </div>
               )}
               <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
-                {selectedMarker.source === "autocomplete" ? "Added via search" : "Dropped pin"}
+                Position: {selectedMarker.position.lat.toFixed(6)}, {selectedMarker.position.lng.toFixed(6)}
               </div>
               
               {/* Notes Section */}
