@@ -116,7 +116,6 @@ function PersonalMap() {
               address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
               types: [],
               placeId: null,
-              source: "dropped",
               notes: ""
             };
             
