@@ -8,6 +8,7 @@ import { BrowserRouter as Router, Route, Routes, Link, useParams } from "react-r
 import { GoogleMapsProvider } from "./components/GoogleMapsContext";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import MyMaps from './components/MyMaps';
 import './App.css';
 
 // Wrapper component to get URL parameters
@@ -93,6 +94,11 @@ function App() {
               ✨ Create New Map
             </button>
           </Link>
+          <Link to="/my-maps" style={{ textDecoration: 'none' }}>
+            <button style={buttonStyle(window.location.pathname === '/my-maps')}>
+              📍 My Maps
+            </button>
+          </Link>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
             {user ? (
               <>
@@ -134,6 +140,7 @@ function App() {
             <Route path="/" element={<MeetupMap />} />
             <Route path="/create-map" element={<CreateMap />} />
             <Route path="/map/:mapId" element={<MapRoute />} />
+            <Route path="/my-maps" element={<MyMaps />} />
           </Routes>
         </div>
       </div>
