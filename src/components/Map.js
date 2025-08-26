@@ -373,7 +373,7 @@ function Map({ mapId }) {
           setMapCenter(userLocation);
           if (mapRef.current) {
             mapRef.current.panTo(userLocation);
-            mapRef.current.setZoom(15);
+            mapRef.current.setZoom(10);
           }
         },
         (error) => {
@@ -627,7 +627,7 @@ function Map({ mapId }) {
       <GoogleMap 
         mapContainerStyle={containerStyle} 
         center={mapCenter} 
-        zoom={8}
+        zoom={10}
         onClick={onMapClick}
         onLoad={onLoad}
       >
