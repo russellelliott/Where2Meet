@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, database } from '../firebaseConfig';
 import { ref, get, update } from 'firebase/database';
+import { sendResponseEmail } from '../utils/emailApi';
 
 function MapInvitation({ mapId, onResponse }) {
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,21 @@ function MapInvitation({ mapId, onResponse }) {
         name: user.displayName,
         respondedAt: Date.now()
       });
+
+      // Send response emails
+      try {
+        await sendResponseEmail({
+          senderEmail: user.email,
+          senderName: user.displayName || 'A user',
+          ownerEmail: mapInfo.ownerEmail,
+          mapName: mapInfo.name,
+          response
+        });
+      } catch (err) {
+        console.error('Error sending response emails:', err);
+        // Don't block the response update if email sending fails
+      }
+
       onResponse(response);
     } catch (err) {
       setError('Error updating response');

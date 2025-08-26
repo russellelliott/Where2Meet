@@ -21,3 +21,13 @@ export async function sendWelcomeEmail({ email, name }) {
   if (!res.ok) throw new Error('Failed to send welcome email');
   return res.json();
 }
+
+export async function sendResponseEmail({ senderEmail, senderName, ownerEmail, mapName, response }) {
+  const res = await fetch(`${API_BASE}/response`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senderEmail, senderName, ownerEmail, mapName, response })
+  });
+  if (!res.ok) throw new Error('Failed to send response email');
+  return res.json();
+}

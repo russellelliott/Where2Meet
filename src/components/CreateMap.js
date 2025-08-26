@@ -35,6 +35,7 @@ function CreateMap() {
         id: mapId,
         name: mapName,
         owner: user.uid,
+        ownerEmail: user.email,
         createdAt: Date.now(),
         collaborators: {},
         markers: {}
