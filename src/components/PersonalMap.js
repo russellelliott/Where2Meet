@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { sendInviteEmail } from "../utils/emailApi";
 import { GoogleMap, LoadScript, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
 import { auth, database } from "../firebaseConfig";
 import { ref, set, remove, onValue, update } from "firebase/database";
@@ -15,6 +16,11 @@ function getGoogleMapsKey() {
 }
 
 function PersonalMap() {
+  // Sharing state
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState("");
+  const [shareError, setShareError] = useState("");
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
@@ -238,6 +244,36 @@ function PersonalMap() {
     mapRef.current = map;
   }, []);
 
+  // Share handler
+  const handleShare = async () => {
+    setShareSuccess("");
+    setShareError("");
+    if (!auth.currentUser) {
+      setShareError("Please sign in to share your map.");
+      return;
+    }
+    if (!shareEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(shareEmail)) {
+      setShareError("Please enter a valid email address.");
+      return;
+    }
+    setShareLoading(true);
+    try {
+      // Use user's UID as mapId for now; you may want to use a real mapId if supporting multiple maps
+      await sendInviteEmail({
+        senderEmail: auth.currentUser.email,
+        senderName: auth.currentUser.displayName || auth.currentUser.email,
+        recipientEmail: shareEmail,
+        mapId: auth.currentUser.uid,
+        mapName: `${auth.currentUser.displayName || 'User'}'s Personal Map`
+      });
+      setShareSuccess("Invitation sent!");
+      setShareEmail("");
+    } catch (e) {
+      setShareError("Failed to send invite. Try again later.");
+    }
+    setShareLoading(false);
+  };
+
   return (
     <LoadScript googleMapsApiKey={getGoogleMapsKey()} libraries={["places"]}>
       <div style={{ 
@@ -251,6 +287,31 @@ function PersonalMap() {
         boxShadow: "0 2px 8px #0002", 
         maxWidth: 350 
       }}>
+        {/* Share map UI */}
+        {auth.currentUser && (
+          <div style={{ marginBottom: 12, padding: 8, background: '#f6faff', borderRadius: 6, border: '1px solid #e0eaff' }}>
+            <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>Share your map by email:</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="email"
+                placeholder="Recipient's email"
+                value={shareEmail}
+                onChange={e => setShareEmail(e.target.value)}
+                style={{ flex: 1, padding: 6, border: '1px solid #ccc', borderRadius: 4, fontSize: 13 }}
+                disabled={shareLoading}
+              />
+              <button
+                onClick={handleShare}
+                disabled={shareLoading}
+                style={{ padding: '6px 12px', background: '#4285f4', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}
+              >
+                {shareLoading ? 'Sending...' : 'Share'}
+              </button>
+            </div>
+            {shareSuccess && <div style={{ color: 'green', fontSize: 12, marginTop: 4 }}>{shareSuccess}</div>}
+            {shareError && <div style={{ color: 'red', fontSize: 12, marginTop: 4 }}>{shareError}</div>}
+          </div>
+        )}
         <h3 style={{ margin: "0 0 10px 0", fontSize: "16px" }}>Personal Map</h3>
         {!auth.currentUser && (
           <div style={{ 
