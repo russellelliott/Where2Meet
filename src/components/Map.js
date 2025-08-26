@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { sendInviteEmail } from "../utils/emailApi";
-import { GoogleMap, LoadScript, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
+import { GoogleMap, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
 import { auth, database } from "../firebaseConfig";
-import { ref, set, remove, onValue, update } from "firebase/database";
+import { ref, set, remove, onValue, update, get } from "firebase/database";
+import MapInvitation from "./MapInvitation";
 
 const containerStyle = {
   width: "100%",
@@ -24,14 +25,50 @@ function Map({ mapId }) {
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
-  const [loading, setLoading] = useState(true);  // Start with loading true
+  const [loading, setLoading] = useState(true);
+  const [showInvitation, setShowInvitation] = useState(false);
+  const [accessStatus, setAccessStatus] = useState(null);
+  const [mapInfo, setMapInfo] = useState(null);
   const autocompleteRef = useRef(null);
   const mapRef = useRef(null);
   const user = auth.currentUser;
 
-  // Get user's location and load markers from Firebase on component mount
+  // Check user's access and load map data
   useEffect(() => {
+    const checkAccess = async () => {
+      if (!user || !mapId) return;
+
+      try {
+        const mapRef = ref(database, `maps/${mapId}`);
+        const snapshot = await get(mapRef);
+        
+        if (!snapshot.exists()) {
+          setLoading(false);
+          return;
+        }
+
+        const mapData = snapshot.val();
+        setMapInfo(mapData);
+        const isOwner = mapData.owner === user.uid;
+        const collaboratorStatus = mapData.collaborators?.[user.uid]?.status;
+
+        if (isOwner) {
+          setAccessStatus('owner');
+        } else if (collaboratorStatus === 'accepted') {
+          setAccessStatus('accepted');
+        } else if (collaboratorStatus === 'declined') {
+          setAccessStatus('declined');
+        } else {
+          setAccessStatus('pending');
+          setShowInvitation(true);
+        }
+      } catch (error) {
+        console.error('Error checking access:', error);
+      }
+    };
+
     setLoading(true);
+    checkAccess();
     
     // Load markers from Firebase if we have a mapId
     if (mapId) {
@@ -135,8 +172,6 @@ function Map({ mapId }) {
     const lat = event.latLng.lat();
     const lng = event.latLng.lng();
     
-    setLoading(true);
-    
     try {
       // Use Google Maps Geocoding API to get place information
       const geocoder = new window.google.maps.Geocoder();
@@ -180,12 +215,10 @@ function Map({ mapId }) {
             alert("Error saving location. Please try again.");
           }
           
-          setLoading(false);
         }
       );
     } catch (error) {
       console.error("Error geocoding location:", error);
-      setLoading(false);
       alert("Error creating marker. Please try again.");
     }
   }, [selectedMarker]);
@@ -265,13 +298,15 @@ function Map({ mapId }) {
     }
     setShareLoading(true);
     try {
-      // Use user's UID as mapId for now; you may want to use a real mapId if supporting multiple maps
+      if (!mapInfo) {
+        throw new Error('Map information not loaded');
+      }
       await sendInviteEmail({
         senderEmail: auth.currentUser.email,
         senderName: auth.currentUser.displayName || auth.currentUser.email,
         recipientEmail: shareEmail,
-        mapId: auth.currentUser.uid,
-        mapName: `${auth.currentUser.displayName || 'User'}'s Personal Map`
+        mapId: mapId,
+        mapName: mapInfo.name
       });
       setShareSuccess("Invitation sent!");
       setShareEmail("");
@@ -283,6 +318,49 @@ function Map({ mapId }) {
 
   if (!user) {
     return <div>Please sign in to view and edit maps.</div>;
+  }
+
+  if (showInvitation) {
+    return (
+      <MapInvitation
+        mapId={mapId}
+        onResponse={(response) => {
+          setShowInvitation(false);
+          setAccessStatus(response);
+        }}
+      />
+    );
+  }
+
+  if (accessStatus === 'declined') {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <p>You have declined this map invitation.</p>
+        <button
+          onClick={() => {
+            setAccessStatus('pending');
+            setShowInvitation(true);
+          }}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#4285f4',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Accept Invitation
+        </button>
+      </div>
+    );
   }
 
   if (loading) {
