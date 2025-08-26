@@ -6,6 +6,8 @@ import Map from "./components/Map";
 import CreateMap from "./components/CreateMap";
 import { BrowserRouter as Router, Route, Routes, Link, useParams } from "react-router-dom";
 import { GoogleMapsProvider } from "./components/GoogleMapsContext";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
 
 // Wrapper component to get URL parameters
@@ -135,6 +137,18 @@ function App() {
           </Routes>
         </div>
       </div>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
       </GoogleMapsProvider>
     </Router>
   );

@@ -4,6 +4,7 @@ import { GoogleMap, Marker, InfoWindow, Autocomplete } from "@react-google-maps/
 import { auth, database } from "../firebaseConfig";
 import { ref, set, remove, onValue, update, get } from "firebase/database";
 import MapInvitation from "./MapInvitation";
+import { toast } from 'react-toastify';
 
 const containerStyle = {
   width: "100%",
@@ -20,8 +21,6 @@ function Map({ mapId }) {
   // Sharing state
   const [shareEmail, setShareEmail] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
-  const [shareSuccess, setShareSuccess] = useState("");
-  const [shareError, setShareError] = useState("");
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
@@ -286,14 +285,12 @@ function Map({ mapId }) {
 
   // Share handler
   const handleShare = async () => {
-    setShareSuccess("");
-    setShareError("");
     if (!auth.currentUser) {
-      setShareError("Please sign in to share your map.");
+      toast.error("Please sign in to share your map.");
       return;
     }
     if (!shareEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(shareEmail)) {
-      setShareError("Please enter a valid email address.");
+      toast.error("Please enter a valid email address.");
       return;
     }
     setShareLoading(true);
@@ -308,10 +305,10 @@ function Map({ mapId }) {
         mapId: mapId,
         mapName: mapInfo.name
       });
-      setShareSuccess("Invitation sent!");
+      toast.success("Invitation sent successfully!");
       setShareEmail("");
     } catch (e) {
-      setShareError("Failed to send invite. Try again later.");
+      toast.error("Failed to send invite. Please try again later.");
     }
     setShareLoading(false);
   };
@@ -412,8 +409,6 @@ function Map({ mapId }) {
                 {shareLoading ? 'Sending...' : 'Share'}
               </button>
             </div>
-            {shareSuccess && <div style={{ color: 'green', fontSize: 12, marginTop: 4 }}>{shareSuccess}</div>}
-            {shareError && <div style={{ color: 'red', fontSize: 12, marginTop: 4 }}>{shareError}</div>}
           </div>
         )}
         <h3 style={{ margin: "0 0 10px 0", fontSize: "16px" }}>Personal Map</h3>

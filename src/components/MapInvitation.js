@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, database } from '../firebaseConfig';
 import { ref, get, update } from 'firebase/database';
 import { sendResponseEmail } from '../utils/emailApi';
+import { toast } from 'react-toastify';
 
 function MapInvitation({ mapId, onResponse }) {
   const [loading, setLoading] = useState(true);
@@ -60,15 +61,17 @@ function MapInvitation({ mapId, onResponse }) {
           mapName: mapInfo.name,
           response
         });
+        toast.success(`Successfully ${response} the invitation`);
       } catch (err) {
         console.error('Error sending response emails:', err);
+        toast.error('Failed to send notification emails, but your response was recorded');
         // Don't block the response update if email sending fails
       }
 
       onResponse(response);
     } catch (err) {
-      setError('Error updating response');
       console.error('Error:', err);
+      toast.error('Failed to update response. Please try again.');
     } finally {
       setLoading(false);
     }
