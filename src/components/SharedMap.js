@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { auth, database } from "../firebaseConfig";
-import { ref, set, onValue, get } from "firebase/database";
+import { ref, set, onValue, get, update, remove } from "firebase/database";
 import { GoogleMap, LoadScript, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
 
 const containerStyle = {
@@ -100,6 +100,46 @@ function SharedMap() {
     });
   }, [status, mapId]);
 
+  // Update marker notes
+  const updateMarkerNotes = async (markerId, notes) => {
+    if (status !== "accepted") return;
+    try {
+      const markerRef = ref(database, `users/${mapId}/markers/${markerId}`);
+      await update(markerRef, { notes });
+      if (selectedMarker && selectedMarker.id === markerId) {
+        setSelectedMarker(prev => ({ ...prev, notes }));
+      }
+    } catch (error) {
+      alert("Error updating notes. Try again.");
+    }
+  };
+
+  // Remove a marker
+  const removeMarker = async (markerId) => {
+    if (status !== "accepted") return;
+    try {
+      const markerRef = ref(database, `users/${mapId}/markers/${markerId}`);
+      await remove(markerRef);
+      setSelectedMarker(null);
+    } catch (error) {
+      alert("Error removing marker. Try again.");
+    }
+  };
+
+  // Clear all markers
+  const clearAllMarkers = async () => {
+    if (status !== "accepted") return;
+    if (window.confirm("Are you sure you want to remove all saved places? This cannot be undone.")) {
+      try {
+        const markersRef = ref(database, `users/${mapId}/markers`);
+        await remove(markersRef);
+        setSelectedMarker(null);
+      } catch (error) {
+        alert("Error clearing locations. Try again.");
+      }
+    }
+  };
+
   // Add marker by search
   const onPlaceChanged = async () => {
     if (status !== "accepted") return;
@@ -176,11 +216,40 @@ function SharedMap() {
             <div style={{ fontSize: "12px", color: "#666", marginBottom: 10 }}>
               Click anywhere on the map to drop a pin
             </div>
+            <div style={{ marginBottom: 10 }}>
+              <strong>Saved Places ({markers.length}):</strong>
+              {markers.length > 0 && (
+                <button 
+                  onClick={clearAllMarkers}
+                  style={{
+                    marginLeft: 10,
+                    padding: "2px 6px",
+                    fontSize: "10px",
+                    background: "#ff4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
             <div style={{ maxHeight: 200, overflowY: 'auto', fontSize: '12px', border: markers.length > 0 ? "1px solid #eee" : "none", borderRadius: "4px" }}>
               {markers.map((marker) => (
-                <div
-                  key={marker.id}
-                  style={{ margin: '4px 0', cursor: 'pointer', padding: '6px', backgroundColor: selectedMarker?.id === marker.id ? '#e0e0e0' : 'transparent', borderRadius: "3px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                <div 
+                  key={marker.id} 
+                  style={{ 
+                    margin: '4px 0', 
+                    cursor: 'pointer', 
+                    padding: '6px', 
+                    backgroundColor: selectedMarker?.id === marker.id ? '#e0e0e0' : 'transparent',
+                    borderRadius: "3px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
                   onClick={() => {
                     setSelectedMarker(selectedMarker?.id === marker.id ? null : marker);
                     setMapCenter(marker.position);
@@ -189,7 +258,26 @@ function SharedMap() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: "bold" }}>{marker.name}</div>
                     <div style={{ color: "#666" }}>{marker.address}</div>
+                    {marker.notes && (
+                      <div style={{ color: "#888", fontSize: "10px", fontStyle: "italic", marginTop: "2px" }}>
+                        📝 {marker.notes.length > 50 ? marker.notes.substring(0, 50) + "..." : marker.notes}
+                      </div>
+                    )}
                   </div>
+                  <button 
+                    onClick={e => { e.stopPropagation(); removeMarker(marker.id); }}
+                    style={{
+                      padding: "2px 4px",
+                      fontSize: "10px",
+                      background: "#ff4444",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "2px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>
@@ -218,8 +306,75 @@ function SharedMap() {
             <div style={{ maxWidth: 250 }}>
               <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>{selectedMarker.name}</h4>
               <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#666' }}>{selectedMarker.address}</p>
+              {selectedMarker.types && selectedMarker.types.length > 0 && (
+                <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
+                  Types: {selectedMarker.types.slice(0, 3).join(', ')}
+                </div>
+              )}
               <div style={{ fontSize: '10px', color: '#999', marginBottom: '8px' }}>
                 Position: {selectedMarker.position.lat.toFixed(6)}, {selectedMarker.position.lng.toFixed(6)}
+              </div>
+              {/* Notes Section */}
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#333', display: 'block', marginBottom: '4px' }}>
+                  Description/Notes:
+                </label>
+                <textarea
+                  value={selectedMarker.notes}
+                  onChange={e => updateMarkerNotes(selectedMarker.id, e.target.value)}
+                  placeholder="Add your notes about this place..."
+                  style={{
+                    width: '100%',
+                    height: '50px',
+                    fontSize: '11px',
+                    padding: '4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '3px',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button 
+                  onClick={() => {
+                    let url;
+                    if (selectedMarker.placeId) {
+                      url = `https://www.google.com/maps/place/?q=place_id:${selectedMarker.placeId}`;
+                    } else {
+                      url = `https://www.google.com/maps?q=${selectedMarker.position.lat},${selectedMarker.position.lng}`;
+                    }
+                    window.open(url, '_blank');
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "10px",
+                    background: "#4285f4",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    flex: 1
+                  }}
+                >
+                  🗺️ Google Maps
+                </button>
+                <button 
+                  onClick={() => removeMarker(selectedMarker.id)}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "10px",
+                    background: "#ff4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    flex: 1
+                  }}
+                >
+                  🗑️ Delete
+                </button>
               </div>
             </div>
           </InfoWindow>
