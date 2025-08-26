@@ -2,10 +2,18 @@ import React, { useState, useEffect } from "react";
 import { auth, provider } from "./firebaseConfig";
 import { signInWithPopup, signOut } from "firebase/auth";
 import MeetupMap from "./components/MeetupMap";
-import PersonalMap from "./components/PersonalMap";
-import SharedMap from "./components/SharedMap";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import Map from "./components/Map";
+import CreateMap from "./components/CreateMap";
+import { BrowserRouter as Router, Route, Routes, Link, useParams } from "react-router-dom";
+import { GoogleMapsProvider } from "./components/GoogleMapsContext";
 import './App.css';
+
+// Wrapper component to get URL parameters
+function MapRoute() {
+  const { mapId } = useParams();
+  return <Map mapId={mapId} />;
+}
+
 
 function App() {
   const [currentView, setCurrentView] = useState('meetup'); // 'meetup' or 'personal'
@@ -69,21 +77,20 @@ function App() {
 
   return (
     <Router>
-      <div className="App">
+      <GoogleMapsProvider>
+        <div className="App">
         <nav style={navStyle}>
           <h1 style={{ margin: 0, fontSize: '18px', color: '#333' }}>Where2Meet</h1>
-          <button 
-            style={buttonStyle(currentView === 'meetup')}
-            onClick={() => setCurrentView('meetup')}
-          >
-            🤝 Meetup Planner
-          </button>
-          <button 
-            style={buttonStyle(currentView === 'personal')}
-            onClick={() => setCurrentView('personal')}
-          >
-            📍 Personal Map
-          </button>
+          <Link to="/" style={{ textDecoration: 'none' }}>
+            <button style={buttonStyle(window.location.pathname === '/')}>
+              🤝 Meetup Planner
+            </button>
+          </Link>
+          <Link to="/create-map" style={{ textDecoration: 'none' }}>
+            <button style={buttonStyle(window.location.pathname === '/create-map')}>
+              ✨ Create New Map
+            </button>
+          </Link>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
             {user ? (
               <>
@@ -122,11 +129,13 @@ function App() {
         </nav>
         <div style={contentStyle}>
           <Routes>
-            <Route path="/" element={currentView === 'meetup' ? <MeetupMap /> : <PersonalMap />} />
-            <Route path="/shared-map/:mapId" element={<SharedMap />} />
+            <Route path="/" element={<MeetupMap />} />
+            <Route path="/create-map" element={<CreateMap />} />
+            <Route path="/map/:mapId" element={<MapRoute />} />
           </Routes>
         </div>
       </div>
+      </GoogleMapsProvider>
     </Router>
   );
 }

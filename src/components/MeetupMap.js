@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useState, useRef } from "react";
-import { GoogleMap, LoadScript, Polygon, Autocomplete, Marker, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, Polygon, Autocomplete, Marker, InfoWindow } from "@react-google-maps/api";
 import martinez from 'polygon-clipping';
 
 const containerStyle = {
@@ -386,7 +386,7 @@ function MeetupMap() {
   }, [citiesInIntersection]);
 
   return (
-    <LoadScript googleMapsApiKey={getGoogleMapsKey()} libraries={["places"]}>
+    <div>
       <div style={{ position: "absolute", zIndex: 200, background: "#fff", padding: 10, left: 10, top: 70, borderRadius: 8, boxShadow: "0 2px 8px #0002", maxWidth: 300 }}>
         <div>
           <label>City A: </label>
@@ -503,7 +503,7 @@ function MeetupMap() {
           );
         })()}
       </GoogleMap>
-    </LoadScript>
+    </div>
   );
 }
 

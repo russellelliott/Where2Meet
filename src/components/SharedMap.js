@@ -29,24 +29,28 @@ function SharedMap() {
 
   useEffect(() => {
     if (!user) return;
-    // Check if user is already a collaborator or has accepted/declined
-    const collabRef = ref(database, `sharedMaps/${mapId}/collaborators/${user.uid}`);
-    get(collabRef).then((snap) => {
+    // Get access info for this map
+    const mapRef = ref(database, `maps/${mapId}`);
+    get(mapRef).then((snap) => {
       if (snap.exists()) {
-        setStatus(snap.val().status);
+        const mapData = snap.val();
+        // Check if user is owner or collaborator
+        if (mapData.owner === user.uid || (mapData.collaborators && mapData.collaborators[user.uid])) {
+          setStatus("accepted");
+        }
+        // Get owner's name
+        get(ref(database, `users/${mapData.owner}/profile`)).then((ownerSnap) => {
+          if (ownerSnap.exists()) setOwnerName(ownerSnap.val().displayName || "");
+        });
       }
       setLoading(false);
-    });
-    // Optionally fetch owner's name
-    get(ref(database, `users/${mapId}/profile`)).then((snap) => {
-      if (snap.exists()) setOwnerName(snap.val().displayName || "");
     });
   }, [user, mapId]);
 
   useEffect(() => {
     if (status !== "accepted") return;
-    // Listen to markers from owner's map
-    const markersRef = ref(database, `users/${mapId}/markers`);
+    // Listen to markers for this specific map
+    const markersRef = ref(database, `maps/${mapId}/markers`);
     const unsub = onValue(markersRef, (snap) => {
       const data = snap.val();
       if (data) {
@@ -55,6 +59,29 @@ function SharedMap() {
         setMarkers([]);
       }
     });
+
+    // Get user's location if available
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          setMapCenter(userLocation);
+        },
+        (error) => {
+          console.warn('Error getting user location:', error);
+          // Keep default location if geolocation fails
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      );
+    }
+
     return () => unsub();
   }, [status, mapId]);
 
@@ -91,7 +118,7 @@ function SharedMap() {
         };
       }
       try {
-        const newMarkerRef = ref(database, `users/${mapId}/markers/${markerId}`);
+        const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
         await set(newMarkerRef, newMarker);
         setSelectedMarker({ ...newMarker, id: markerId });
       } catch (error) {
