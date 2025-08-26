@@ -77,25 +77,7 @@ function Map({ mapId }) {
       );
     }
 
-    // Load markers from Firebase
-    if (auth.currentUser) {
-      const markersRef = ref(database, `users/${auth.currentUser.uid}/markers`);
-      
-      const unsubscribe = onValue(markersRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const markersArray = Object.entries(data).map(([id, marker]) => ({
-            ...marker,
-            id
-          }));
-          setMarkers(markersArray);
-        } else {
-          setMarkers([]);
-        }
-      });
-
-      return () => unsubscribe();
-    }
+    // Loading of markers is now handled in the mapId effect above
   }, [auth.currentUser]);
 
   // Handle place selection from autocomplete
@@ -121,10 +103,11 @@ function Map({ mapId }) {
       };
       
       try {
-        const newMarkerRef = ref(database, `users/${auth.currentUser.uid}/markers/${Date.now()}`);
+        const markerId = Date.now().toString();
+        const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
         await set(newMarkerRef, newMarker);
         setMapCenter(newMarker.position);
-        setSelectedMarker({ ...newMarker, id: newMarkerRef.key });
+        setSelectedMarker({ ...newMarker, id: markerId });
         
         // Clear the input
         const input = document.querySelector('input[placeholder="Search for a place..."]');
@@ -188,7 +171,7 @@ function Map({ mapId }) {
           }
           
           try {
-            const newMarkerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+            const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
             await set(newMarkerRef, newMarker);
             // Automatically select the newly created marker to show InfoWindow
             setSelectedMarker({ ...newMarker, id: markerId });
@@ -215,7 +198,7 @@ function Map({ mapId }) {
     }
 
     try {
-      const markerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+      const markerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
       await update(markerRef, { notes });
       
       // Update selectedMarker to keep it in sync
@@ -236,7 +219,7 @@ function Map({ mapId }) {
     }
 
     try {
-      const markerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+      const markerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
       await remove(markerRef);
       setSelectedMarker(null);
     } catch (error) {
@@ -254,7 +237,7 @@ function Map({ mapId }) {
 
     if (window.confirm("Are you sure you want to remove all saved places? This cannot be undone.")) {
       try {
-        const markersRef = ref(database, `users/${auth.currentUser.uid}/markers`);
+        const markersRef = ref(database, `maps/${mapId}/markers`);
         await remove(markersRef);
         setSelectedMarker(null);
       } catch (error) {
