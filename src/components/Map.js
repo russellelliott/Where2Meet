@@ -249,25 +249,36 @@ function Map({ mapId }) {
     }
   }, [selectedMarker]);
 
-  // Update marker notes
+  // Create a ref to store the timeout
+  const updateTimeoutRef = useRef(null);
+
+  // Update marker notes with debouncing
   const updateMarkerNotes = async (markerId, notes) => {
     if (!auth.currentUser) {
       alert("Please sign in to edit places");
       return;
     }
 
-    try {
-      const markerRef = doc(db, 'maps', mapId, 'markers', markerId);
-      await updateDoc(markerRef, { notes });
-      
-      // Update selectedMarker to keep it in sync
-      if (selectedMarker && selectedMarker.id === markerId) {
-        setSelectedMarker(prev => ({ ...prev, notes }));
-      }
-    } catch (error) {
-      console.error("Error updating marker notes:", error);
-      alert("Error updating notes. Please try again.");
+    // Immediately update the local state for smooth typing
+    if (selectedMarker && selectedMarker.id === markerId) {
+      setSelectedMarker(prev => ({ ...prev, notes }));
     }
+
+    // Clear any existing timeout
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+
+    // Set a new timeout to update Firebase after 500ms of no typing
+    updateTimeoutRef.current = setTimeout(async () => {
+      try {
+        const markerRef = doc(db, 'maps', mapId, 'markers', markerId);
+        await updateDoc(markerRef, { notes });
+      } catch (error) {
+        console.error("Error updating marker notes:", error);
+        alert("Error updating notes. Please try again.");
+      }
+    }, 500);
   };
 
   // Remove a marker
@@ -616,7 +627,7 @@ function Map({ mapId }) {
       <GoogleMap 
         mapContainerStyle={containerStyle} 
         center={mapCenter} 
-        zoom={12}
+        zoom={8}
         onClick={onMapClick}
         onLoad={onLoad}
       >
