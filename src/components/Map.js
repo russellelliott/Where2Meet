@@ -28,14 +28,56 @@ function Map({ mapId }) {
   const [showInvitation, setShowInvitation] = useState(false);
   const [accessStatus, setAccessStatus] = useState(null);
   const [mapInfo, setMapInfo] = useState(null);
+  const [userLocationLoaded, setUserLocationLoaded] = useState(false);
   const autocompleteRef = useRef(null);
   const mapRef = useRef(null);
   const user = auth.currentUser;
 
+  // Get user's location - separate effect to run immediately
+  useEffect(() => {
+    const getUserLocation = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+            console.log('User location obtained:', userLocation);
+            setMapCenter(userLocation);
+            setUserLocationLoaded(true);
+          },
+          (error) => {
+            console.warn('Error getting user location:', error);
+            console.warn('Error code:', error.code, 'Message:', error.message);
+            // Keep default location if geolocation fails
+            setUserLocationLoaded(true);
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000 // 5 minutes
+          }
+        );
+      } else {
+        console.warn('Geolocation is not supported by this browser');
+        setUserLocationLoaded(true);
+      }
+    };
+
+    // Only get user location if we haven't already
+    if (!userLocationLoaded) {
+      getUserLocation();
+    }
+  }, [userLocationLoaded]);
+
   // Check user's access and load map data
   useEffect(() => {
     const checkAccess = async () => {
-      if (!user || !mapId) return;
+      if (!user || !mapId) {
+        setLoading(false);
+        return;
+      }
 
       try {
         const mapDocRef = doc(db, 'maps', mapId);
@@ -63,53 +105,42 @@ function Map({ mapId }) {
         }
       } catch (error) {
         console.error('Error checking access:', error);
+        setLoading(false);
       }
     };
 
-    setLoading(true);
     checkAccess();
-    
-    // Load markers from Firestore if we have a mapId
-    if (mapId) {
-      const markersRef = collection(db, 'maps', mapId, 'markers');
-      const unsubscribe = onSnapshot(markersRef, (snapshot) => {
-        const markersArray = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
-        }));
-        setMarkers(markersArray);
-        setLoading(false);
-      });
+  }, [user, mapId]);
 
-      return () => unsubscribe();
+  // Load markers from Firestore
+  useEffect(() => {
+    if (!mapId || !user) {
+      setLoading(false);
+      return;
     }
 
-    // Get user's location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const userLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          setMapCenter(userLocation);
-          setLoading(false);
-        },
-        (error) => {
-          console.warn('Error getting user location:', error);
-          // Keep default location if geolocation fails
-          setLoading(false);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000 // 5 minutes
-        }
-      );
-    }
+    const markersRef = collection(db, 'maps', mapId, 'markers');
+    const unsubscribe = onSnapshot(markersRef, (snapshot) => {
+      const markersArray = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      setMarkers(markersArray);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error loading markers:', error);
+      setLoading(false);
+    });
 
-    // Loading of markers is now handled in the mapId effect above
-  }, [auth.currentUser]);
+    return () => unsubscribe();
+  }, [mapId, user]);
+
+  // Set loading to false when user location is loaded and no mapId is provided
+  useEffect(() => {
+    if (!mapId && userLocationLoaded) {
+      setLoading(false);
+    }
+  }, [mapId, userLocationLoaded]);
 
   // Handle place selection from autocomplete
   const onPlaceChanged = async () => {
@@ -319,6 +350,36 @@ function Map({ mapId }) {
     setShareLoading(false);
   };
 
+  // Add a function to recenter on user location
+  const centerOnUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          setMapCenter(userLocation);
+          if (mapRef.current) {
+            mapRef.current.panTo(userLocation);
+            mapRef.current.setZoom(15);
+          }
+        },
+        (error) => {
+          console.warn('Error getting current location:', error);
+          toast.error('Could not get your current location');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000 // 1 minute
+        }
+      );
+    } else {
+      toast.error('Geolocation is not supported by your browser');
+    }
+  };
+
   if (!user) {
     return <div>Please sign in to view and edit maps.</div>;
   }
@@ -395,7 +456,7 @@ function Map({ mapId }) {
         maxWidth: 350 
       }}>
         {/* Share map UI */}
-        {auth.currentUser && (
+        {auth.currentUser && mapId && (
           <div style={{ marginBottom: 12, padding: 8, background: '#f6faff', borderRadius: 6, border: '1px solid #e0eaff' }}>
             <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>Share your map by email:</div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -417,7 +478,29 @@ function Map({ mapId }) {
             </div>
           </div>
         )}
-        <h3 style={{ margin: "0 0 10px 0", fontSize: "16px" }}>Personal Map</h3>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ margin: "0", fontSize: "16px" }}>Personal Map</h3>
+          <button
+            onClick={centerOnUserLocation}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              background: '#4285f4',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+            title="Center map on your location"
+          >
+            📍 My Location
+          </button>
+        </div>
+
         {!auth.currentUser && (
           <div style={{ 
             padding: "10px", 
@@ -533,7 +616,7 @@ function Map({ mapId }) {
       <GoogleMap 
         mapContainerStyle={containerStyle} 
         center={mapCenter} 
-        zoom={10}
+        zoom={12}
         onClick={onMapClick}
         onLoad={onLoad}
       >
