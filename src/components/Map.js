@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { sendInviteEmail } from "../utils/emailApi";
 import { GoogleMap, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
-import { auth, database } from "../firebaseConfig";
-import { ref, set, remove, onValue, update, get } from "firebase/database";
+import { auth, db } from "../firebaseConfig";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import MapInvitation from "./MapInvitation";
 import { toast } from 'react-toastify';
 
@@ -38,15 +38,15 @@ function Map({ mapId }) {
       if (!user || !mapId) return;
 
       try {
-        const mapRef = ref(database, `maps/${mapId}`);
-        const snapshot = await get(mapRef);
+        const mapDocRef = doc(db, 'maps', mapId);
+        const snapshot = await getDoc(mapDocRef);
         
         if (!snapshot.exists()) {
           setLoading(false);
           return;
         }
 
-        const mapData = snapshot.val();
+        const mapData = snapshot.data();
         setMapInfo(mapData);
         const isOwner = mapData.owner === user.uid;
         const collaboratorStatus = mapData.collaborators?.[user.uid]?.status;
@@ -69,20 +69,15 @@ function Map({ mapId }) {
     setLoading(true);
     checkAccess();
     
-    // Load markers from Firebase if we have a mapId
+    // Load markers from Firestore if we have a mapId
     if (mapId) {
-      const markersRef = ref(database, `maps/${mapId}/markers`);
-      const unsubscribe = onValue(markersRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const markersArray = Object.entries(data).map(([id, marker]) => ({
-            ...marker,
-            id
-          }));
-          setMarkers(markersArray);
-        } else {
-          setMarkers([]);
-        }
+      const markersRef = collection(db, 'maps', mapId, 'markers');
+      const unsubscribe = onSnapshot(markersRef, (snapshot) => {
+        const markersArray = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        }));
+        setMarkers(markersArray);
         setLoading(false);
       });
 
@@ -139,11 +134,11 @@ function Map({ mapId }) {
       };
       
       try {
-        const markerId = Date.now().toString();
-        const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
-        await set(newMarkerRef, newMarker);
+        const markersCollection = collection(db, 'maps', mapId, 'markers');
+        const newMarkerRef = doc(markersCollection);
+        await setDoc(newMarkerRef, newMarker);
         setMapCenter(newMarker.position);
-        setSelectedMarker({ ...newMarker, id: markerId });
+        setSelectedMarker({ ...newMarker, id: newMarkerRef.id });
         
         // Clear the input
         const input = document.querySelector('input[placeholder="Search for a place..."]');
@@ -205,10 +200,11 @@ function Map({ mapId }) {
           }
           
           try {
-            const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
-            await set(newMarkerRef, newMarker);
+            const markersCollection = collection(db, 'maps', mapId, 'markers');
+            const newMarkerRef = doc(markersCollection);
+            await setDoc(newMarkerRef, newMarker);
             // Automatically select the newly created marker to show InfoWindow
-            setSelectedMarker({ ...newMarker, id: markerId });
+            setSelectedMarker({ ...newMarker, id: newMarkerRef.id });
           } catch (error) {
             console.error("Error saving marker:", error);
             alert("Error saving location. Please try again.");
@@ -230,8 +226,8 @@ function Map({ mapId }) {
     }
 
     try {
-      const markerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
-      await update(markerRef, { notes });
+      const markerRef = doc(db, 'maps', mapId, 'markers', markerId);
+      await updateDoc(markerRef, { notes });
       
       // Update selectedMarker to keep it in sync
       if (selectedMarker && selectedMarker.id === markerId) {
@@ -251,8 +247,8 @@ function Map({ mapId }) {
     }
 
     try {
-      const markerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
-      await remove(markerRef);
+      const markerRef = doc(db, 'maps', mapId, 'markers', markerId);
+      await deleteDoc(markerRef);
       setSelectedMarker(null);
     } catch (error) {
       console.error("Error removing marker:", error);
@@ -269,8 +265,18 @@ function Map({ mapId }) {
 
     if (window.confirm("Are you sure you want to remove all saved places? This cannot be undone.")) {
       try {
-        const markersRef = ref(database, `maps/${mapId}/markers`);
-        await remove(markersRef);
+        // Get all markers
+        const markersCollection = collection(db, 'maps', mapId, 'markers');
+        const markersSnapshot = await getDocs(markersCollection);
+        
+        // Create a batch operation
+        const batch = writeBatch(db);
+        markersSnapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        
+        // Commit the batch
+        await batch.commit();
         setSelectedMarker(null);
       } catch (error) {
         console.error("Error clearing markers:", error);

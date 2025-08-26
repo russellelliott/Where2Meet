@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { auth, database } from '../firebaseConfig';
-import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { auth, db } from '../firebaseConfig';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
@@ -19,39 +19,27 @@ function MyMaps() {
 
       try {
         // Fetch maps owned by the user
-        const ownedMapsRef = query(
-          ref(database, 'maps'),
-          orderByChild('owner'),
-          equalTo(user.uid)
-        );
-        const ownedSnapshot = await get(ownedMapsRef);
-        const ownedMapsData = [];
-        ownedSnapshot.forEach((child) => {
-          ownedMapsData.push({
-            id: child.key,
-            ...child.val()
-          });
-        });
+        const mapsCollection = collection(db, 'maps');
+        const ownedMapsQuery = query(mapsCollection, where('owner', '==', user.uid));
+        const ownedSnapshot = await getDocs(ownedMapsQuery);
+        
+        const ownedMapsData = ownedSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
         setOwnedMaps(ownedMapsData);
 
         // Fetch maps where user is a collaborator
-        const allMapsRef = ref(database, 'maps');
-        const allMapsSnapshot = await get(allMapsRef);
-        const collaborativeMapsData = [];
+        const collaborativeMapsQuery = query(
+          mapsCollection,
+          where(`collaborators.${user.uid}.status`, '==', 'accepted')
+        );
+        const collaborativeSnapshot = await getDocs(collaborativeMapsQuery);
         
-        allMapsSnapshot.forEach((child) => {
-          const mapData = child.val();
-          if (
-            mapData.collaborators &&
-            mapData.collaborators[user.uid] &&
-            mapData.collaborators[user.uid].status === 'accepted'
-          ) {
-            collaborativeMapsData.push({
-              id: child.key,
-              ...mapData
-            });
-          }
-        });
+        const collaborativeMapsData = collaborativeSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
         setCollaborativeMaps(collaborativeMapsData);
 
       } catch (error) {
@@ -148,10 +136,6 @@ const styles = {
     color: 'inherit',
     backgroundColor: 'white',
     transition: 'transform 0.2s, box-shadow 0.2s',
-    ':hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
-    }
   }
 };
 

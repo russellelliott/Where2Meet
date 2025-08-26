@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { auth, database } from '../firebaseConfig';
-import { ref, get, update } from 'firebase/database';
+import { auth, db } from '../firebaseConfig';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { sendResponseEmail } from '../utils/emailApi';
 import { toast } from 'react-toastify';
 
@@ -15,11 +15,11 @@ function MapInvitation({ mapId, onResponse }) {
       if (!user || !mapId) return;
 
       try {
-        const mapRef = ref(database, `maps/${mapId}`);
-        const snapshot = await get(mapRef);
+        const mapRef = doc(db, 'maps', mapId);
+        const snapshot = await getDoc(mapRef);
         
         if (snapshot.exists()) {
-          const mapData = snapshot.val();
+          const mapData = snapshot.data();
           setMapInfo(mapData);
           
           // Check if user is already a collaborator
@@ -45,11 +45,27 @@ function MapInvitation({ mapId, onResponse }) {
 
     try {
       setLoading(true);
-      await update(ref(database, `maps/${mapId}/collaborators/${user.uid}`), {
-        status: response,
-        email: user.email,
-        name: user.displayName,
-        respondedAt: Date.now()
+      const mapRef = doc(db, 'maps', mapId);
+      
+      // First, get the current map data
+      const mapSnapshot = await getDoc(mapRef);
+      if (!mapSnapshot.exists()) {
+        throw new Error('Map not found');
+      }
+      
+      const currentData = mapSnapshot.data();
+      const updatedCollaborators = {
+        ...currentData.collaborators,
+        [user.uid]: {
+          status: response,
+          email: user.email,
+          name: user.displayName,
+          respondedAt: Date.now()
+        }
+      };
+      
+      await updateDoc(mapRef, {
+        collaborators: updatedCollaborators
       });
 
       // Send response emails

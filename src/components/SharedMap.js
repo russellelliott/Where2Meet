@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { auth, database } from "../firebaseConfig";
-import { ref, set, onValue, get, update, remove } from "firebase/database";
+import { auth, db } from "../firebaseConfig";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { GoogleMap, LoadScript, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
 
 const containerStyle = {
@@ -29,20 +29,30 @@ function SharedMap() {
 
   useEffect(() => {
     if (!user) return;
-    // Get access info for this map
-    const mapRef = ref(database, `maps/${mapId}`);
-    get(mapRef).then((snap) => {
+    
+    const fetchMapData = async () => {
+      // Get access info for this map
+      const mapDocRef = doc(db, 'maps', mapId);
+      const snap = await getDoc(mapDocRef);
+      
       if (snap.exists()) {
-        const mapData = snap.val();
+        const mapData = snap.data();
         // Check if user is owner or collaborator
         if (mapData.owner === user.uid || (mapData.collaborators && mapData.collaborators[user.uid])) {
           setStatus("accepted");
         }
         // Get owner's name
-        get(ref(database, `users/${mapData.owner}/profile`)).then((ownerSnap) => {
-          if (ownerSnap.exists()) setOwnerName(ownerSnap.val().displayName || "");
-        });
+        const ownerProfileRef = doc(db, 'users', mapData.owner, 'profile', 'info');
+        const ownerSnap = await getDoc(ownerProfileRef);
+        if (ownerSnap.exists()) {
+          setOwnerName(ownerSnap.data().displayName || "");
+        }
       }
+      setLoading(false);
+    };
+
+    fetchMapData().catch(error => {
+      console.error('Error fetching map data:', error);
       setLoading(false);
     });
   }, [user, mapId]);
@@ -50,14 +60,13 @@ function SharedMap() {
   useEffect(() => {
     if (status !== "accepted") return;
     // Listen to markers for this specific map
-    const markersRef = ref(database, `maps/${mapId}/markers`);
-    const unsub = onValue(markersRef, (snap) => {
-      const data = snap.val();
-      if (data) {
-        setMarkers(Object.entries(data).map(([id, marker]) => ({ ...marker, id })));
-      } else {
-        setMarkers([]);
-      }
+    const markersCollection = collection(db, 'maps', mapId, 'markers');
+    const unsub = onSnapshot(markersCollection, (snapshot) => {
+      const markersArray = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      setMarkers(markersArray);
     });
 
     // Get user's location if available
@@ -118,9 +127,10 @@ function SharedMap() {
         };
       }
       try {
-        const newMarkerRef = ref(database, `maps/${mapId}/markers/${markerId}`);
-        await set(newMarkerRef, newMarker);
-        setSelectedMarker({ ...newMarker, id: markerId });
+        const markersCollection = collection(db, 'maps', mapId, 'markers');
+        const newMarkerRef = doc(markersCollection);
+        await setDoc(newMarkerRef, newMarker);
+        setSelectedMarker({ ...newMarker, id: newMarkerRef.id });
       } catch (error) {
         alert("Error saving marker. Try again.");
       }
@@ -131,8 +141,8 @@ function SharedMap() {
   const updateMarkerNotes = async (markerId, notes) => {
     if (status !== "accepted") return;
     try {
-      const markerRef = ref(database, `users/${mapId}/markers/${markerId}`);
-      await update(markerRef, { notes });
+      const markerRef = doc(db, 'maps', mapId, 'markers', markerId);
+      await updateDoc(markerRef, { notes });
       if (selectedMarker && selectedMarker.id === markerId) {
         setSelectedMarker(prev => ({ ...prev, notes }));
       }

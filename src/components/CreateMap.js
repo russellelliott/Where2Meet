@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, database } from '../firebaseConfig';
-import { ref, set } from 'firebase/database';
+import { auth, db } from '../firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
 function CreateMap() {
@@ -30,7 +30,7 @@ function CreateMap() {
       // Generate a UUID for the map
       const mapId = uuidv4();
       
-      // Create the map in the database
+      // Create the map in Firestore
       const mapData = {
         id: mapId,
         name: mapName,
@@ -38,10 +38,10 @@ function CreateMap() {
         ownerEmail: user.email,
         createdAt: Date.now(),
         collaborators: {},
-        markers: {}
       };
 
-      await set(ref(database, `maps/${mapId}`), mapData);
+      const mapRef = doc(db, 'maps', mapId);
+      await setDoc(mapRef, mapData);
 
       // Navigate to the new map
       navigate(`/map/${mapId}`);
