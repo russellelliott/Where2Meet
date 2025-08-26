@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { GoogleMap, LoadScript, Marker, InfoWindow, Autocomplete } from "@react-google-maps/api";
+import { auth, database } from "../firebaseConfig";
+import { ref, set, remove, onValue, update } from "firebase/database";
 
 const containerStyle = {
   width: "100%",
@@ -19,9 +21,11 @@ function PersonalMap() {
   const [loading, setLoading] = useState(false);
   const autocompleteRef = useRef(null);
   const mapRef = useRef(null);
+  const user = auth.currentUser;
 
-  // Get user's location on component mount
+  // Get user's location and load markers from Firebase on component mount
   useEffect(() => {
+    // Get user's location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -42,14 +46,38 @@ function PersonalMap() {
         }
       );
     }
-  }, []);
+
+    // Load markers from Firebase
+    if (auth.currentUser) {
+      const markersRef = ref(database, `users/${auth.currentUser.uid}/markers`);
+      
+      const unsubscribe = onValue(markersRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const markersArray = Object.entries(data).map(([id, marker]) => ({
+            ...marker,
+            id
+          }));
+          setMarkers(markersArray);
+        } else {
+          setMarkers([]);
+        }
+      });
+
+      return () => unsubscribe();
+    }
+  }, [auth.currentUser]);
 
   // Handle place selection from autocomplete
-  const onPlaceChanged = () => {
+  const onPlaceChanged = async () => {
+    if (!auth.currentUser) {
+      alert("Please sign in to save places");
+      return;
+    }
+
     const place = autocompleteRef.current.getPlace();
     if (place && place.geometry && place.geometry.location) {
       const newMarker = {
-        id: Date.now(), // Simple ID generation
         position: {
           lat: place.geometry.location.lat(),
           lng: place.geometry.location.lng()
@@ -58,22 +86,33 @@ function PersonalMap() {
         address: place.formatted_address || "",
         types: place.types || [],
         placeId: place.place_id,
-        notes: ""
+        notes: "",
+        createdAt: Date.now()
       };
       
-      setMarkers(prev => [...prev, newMarker]);
-      setMapCenter(newMarker.position);
-      // Automatically select the newly created marker to show InfoWindow
-      setSelectedMarker(newMarker);
-      
-      // Clear the input
-      const input = document.querySelector('input[placeholder="Search for a place..."]');
-      if (input) input.value = '';
+      try {
+        const newMarkerRef = ref(database, `users/${auth.currentUser.uid}/markers/${Date.now()}`);
+        await set(newMarkerRef, newMarker);
+        setMapCenter(newMarker.position);
+        setSelectedMarker({ ...newMarker, id: newMarkerRef.key });
+        
+        // Clear the input
+        const input = document.querySelector('input[placeholder="Search for a place..."]');
+        if (input) input.value = '';
+      } catch (error) {
+        console.error("Error saving marker:", error);
+        alert("Error saving location. Please try again.");
+      }
     }
   };
 
   // Handle map clicks to drop pins
   const onMapClick = useCallback(async (event) => {
+    if (!auth.currentUser) {
+      alert("Please sign in to save places");
+      return;
+    }
+
     // If there's a selected marker, close it first without creating a new marker
     if (selectedMarker) {
       setSelectedMarker(null);
@@ -91,82 +130,108 @@ function PersonalMap() {
       
       geocoder.geocode(
         { location: { lat, lng } },
-        (results, status) => {
+        async (results, status) => {
+          let newMarker;
+          const markerId = Date.now();
+          
           if (status === "OK" && results && results.length > 0) {
             const place = results[0];
-            const newMarker = {
-              id: Date.now(),
+            newMarker = {
               position: { lat, lng },
               name: place.formatted_address || "Dropped Pin",
               address: place.formatted_address || "",
               types: place.types || [],
               placeId: place.place_id,
-              notes: ""
+              notes: "",
+              createdAt: markerId
             };
-            
-            setMarkers(prev => [...prev, newMarker]);
-            // Automatically select the newly created marker to show InfoWindow
-            setSelectedMarker(newMarker);
           } else {
-            // If geocoding fails, still create a marker with basic info
-            const newMarker = {
-              id: Date.now(),
+            newMarker = {
               position: { lat, lng },
               name: "Dropped Pin",
               address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
               types: [],
               placeId: null,
-              notes: ""
+              notes: "",
+              createdAt: markerId
             };
-            
-            setMarkers(prev => [...prev, newMarker]);
-            // Automatically select the newly created marker to show InfoWindow
-            setSelectedMarker(newMarker);
           }
+          
+          try {
+            const newMarkerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+            await set(newMarkerRef, newMarker);
+            // Automatically select the newly created marker to show InfoWindow
+            setSelectedMarker({ ...newMarker, id: markerId });
+          } catch (error) {
+            console.error("Error saving marker:", error);
+            alert("Error saving location. Please try again.");
+          }
+          
           setLoading(false);
         }
       );
     } catch (error) {
       console.error("Error geocoding location:", error);
-      // Still create a basic marker
-      const newMarker = {
-        id: Date.now(),
-        position: { lat, lng },
-        name: "Dropped Pin",
-        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-        types: [],
-        placeId: null,
-        notes: ""
-      };
-      
-      setMarkers(prev => [...prev, newMarker]);
-      // Automatically select the newly created marker to show InfoWindow
-      setSelectedMarker(newMarker);
       setLoading(false);
+      alert("Error creating marker. Please try again.");
     }
   }, [selectedMarker]);
 
   // Update marker notes
-  const updateMarkerNotes = (markerId, notes) => {
-    setMarkers(prev => prev.map(marker => 
-      marker.id === markerId ? { ...marker, notes } : marker
-    ));
-    // Update selectedMarker to keep it in sync
-    if (selectedMarker && selectedMarker.id === markerId) {
-      setSelectedMarker(prev => ({ ...prev, notes }));
+  const updateMarkerNotes = async (markerId, notes) => {
+    if (!auth.currentUser) {
+      alert("Please sign in to edit places");
+      return;
+    }
+
+    try {
+      const markerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+      await update(markerRef, { notes });
+      
+      // Update selectedMarker to keep it in sync
+      if (selectedMarker && selectedMarker.id === markerId) {
+        setSelectedMarker(prev => ({ ...prev, notes }));
+      }
+    } catch (error) {
+      console.error("Error updating marker notes:", error);
+      alert("Error updating notes. Please try again.");
     }
   };
 
   // Remove a marker
-  const removeMarker = (markerId) => {
-    setMarkers(prev => prev.filter(marker => marker.id !== markerId));
-    setSelectedMarker(null);
+  const removeMarker = async (markerId) => {
+    if (!auth.currentUser) {
+      alert("Please sign in to remove places");
+      return;
+    }
+
+    try {
+      const markerRef = ref(database, `users/${auth.currentUser.uid}/markers/${markerId}`);
+      await remove(markerRef);
+      setSelectedMarker(null);
+    } catch (error) {
+      console.error("Error removing marker:", error);
+      alert("Error removing location. Please try again.");
+    }
   };
 
   // Clear all markers
-  const clearAllMarkers = () => {
-    setMarkers([]);
-    setSelectedMarker(null);
+  const clearAllMarkers = async () => {
+    if (!auth.currentUser) {
+      alert("Please sign in to clear places");
+      return;
+    }
+
+    if (window.confirm("Are you sure you want to remove all saved places? This cannot be undone.")) {
+      try {
+        const markersRef = ref(database, `users/${auth.currentUser.uid}/markers`);
+        await remove(markersRef);
+        setSelectedMarker(null);
+      } catch (error) {
+        console.error("Error clearing markers:", error);
+        alert("Error clearing locations. Please try again.");
+      }
+    }
   };
 
   const onLoad = useCallback((map) => {
@@ -187,6 +252,18 @@ function PersonalMap() {
         maxWidth: 350 
       }}>
         <h3 style={{ margin: "0 0 10px 0", fontSize: "16px" }}>Personal Map</h3>
+        {!auth.currentUser && (
+          <div style={{ 
+            padding: "10px", 
+            marginBottom: "10px", 
+            backgroundColor: "#f8f8f8", 
+            borderRadius: "4px",
+            color: "#666",
+            fontSize: "14px"
+          }}>
+            Please sign in to save and view your places
+          </div>
+        )}
         <div style={{ marginBottom: 10 }}>
           <Autocomplete 
             onLoad={ac => (autocompleteRef.current = ac)} 

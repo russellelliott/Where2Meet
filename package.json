@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@firebase/auth": "^1.11.0",
+    "@firebase/database": "^1.1.0",
     "@react-google-maps/api": "^2.20.7",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.4",

@@ -1,10 +1,38 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { auth, provider } from "./firebaseConfig";
+import { signInWithPopup, signOut } from "firebase/auth";
 import MeetupMap from "./components/MeetupMap";
 import PersonalMap from "./components/PersonalMap";
 import './App.css';
 
 function App() {
   const [currentView, setCurrentView] = useState('meetup'); // 'meetup' or 'personal'
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Set up authentication listener
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setUser(user);
+    });
+
+    return () => unsubscribe(); // Cleanup subscription
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Error signing in with Google: ", error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
 
   const navStyle = {
     position: 'fixed',
@@ -53,6 +81,41 @@ function App() {
         >
           📍 Personal Map
         </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {user ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName}
+                  style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+                />
+                <span style={{ fontSize: '14px' }}>{user.displayName}</span>
+              </div>
+              <button
+                style={{
+                  ...buttonStyle(false),
+                  background: '#ff4444',
+                  color: 'white',
+                }}
+                onClick={handleSignOut}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button
+              style={{
+                ...buttonStyle(false),
+                background: '#4285f4',
+                color: 'white',
+              }}
+              onClick={handleSignIn}
+            >
+              Sign in with Google
+            </button>
+          )}
+        </div>
       </nav>
       
       <div style={contentStyle}>
