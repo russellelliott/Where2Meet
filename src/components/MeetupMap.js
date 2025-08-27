@@ -203,36 +203,70 @@ function MeetupMap() {
         setLoading(false);
         return;
       }
-      // Time budget: slightly more than half the travel time
-      const timeBudget = Math.ceil(travelTime / 2 + 900); // +15 min buffer
-      const urlA = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationA.lat},${locationA.lng}&timeBudgetInSec=${timeBudget}`;
-      const urlB = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationB.lat},${locationB.lng}&timeBudgetInSec=${timeBudget}`;
+      // Calculate time budgets with more generous buffers
+      // Use 60% of total travel time + 20 minute buffer to ensure overlap
+      const baseTimeBudget = Math.ceil(travelTime * 0.6);
+      const bufferTime = 1200; // 20 minutes in seconds
+      const timeBudget = baseTimeBudget + bufferTime;
+
+      // Add mode=driving parameter and timeUnit=second for more accurate results
+      const urlA = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationA.lat},${locationA.lng}&timeBudgetInSec=${timeBudget}&mode=driving&timeUnit=second`;
+      const urlB = `https://atlas.microsoft.com/route/range/json?subscription-key=${subscriptionKey}&api-version=1.0&query=${locationB.lat},${locationB.lng}&timeBudgetInSec=${timeBudget}&mode=driving&timeUnit=second`;
       try {
         const [respA, respB] = await Promise.all([fetch(urlA), fetch(urlB)]);
         const [jsonA, jsonB] = await Promise.all([respA.json(), respB.json()]);
         function toGeoJson(json) {
-          if (json.reachableRange && json.reachableRange.boundary) {
-            const polygonCoordinates = json.reachableRange.boundary.map(point => [point.longitude, point.latitude]);
-            if (polygonCoordinates.length > 0) {
-              const first = polygonCoordinates[0];
-              const last = polygonCoordinates[polygonCoordinates.length - 1];
-              if (first[0] !== last[0] || first[1] !== last[1]) {
-                polygonCoordinates.push(first);
-              }
-            }
-            return {
-              type: "FeatureCollection",
-              features: [{
-                type: "Feature",
-                geometry: { type: "Polygon", coordinates: [polygonCoordinates] },
-                properties: {}
-              }]
-            };
+          if (!json.reachableRange || !json.reachableRange.boundary || json.reachableRange.boundary.length < 3) {
+            return null;
           }
-          return null;
+
+          const polygonCoordinates = json.reachableRange.boundary.map(point => [point.longitude, point.latitude]);
+          
+          // Ensure the polygon is valid (at least 3 points)
+          if (polygonCoordinates.length < 3) {
+            return null;
+          }
+
+          // Ensure the polygon is closed
+          const first = polygonCoordinates[0];
+          const last = polygonCoordinates[polygonCoordinates.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            polygonCoordinates.push(first);
+          }
+
+          // Validate coordinates
+          const isValid = polygonCoordinates.every(coord => 
+            typeof coord[0] === 'number' && 
+            typeof coord[1] === 'number' &&
+            !isNaN(coord[0]) && 
+            !isNaN(coord[1])
+          );
+
+          if (!isValid) {
+            return null;
+          }
+
+          return {
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              geometry: { type: "Polygon", coordinates: [polygonCoordinates] },
+              properties: {}
+            }]
+          };
         }
-        setIsochroneA(toGeoJson(jsonA));
-        setIsochroneB(toGeoJson(jsonB));
+
+        const isochroneAResult = toGeoJson(jsonA);
+        const isochroneBResult = toGeoJson(jsonB);
+
+        if (!isochroneAResult || !isochroneBResult) {
+          setError("Invalid isochrone data received from the server");
+          setLoading(false);
+          return;
+        }
+
+        setIsochroneA(isochroneAResult);
+        setIsochroneB(isochroneBResult);
       } catch (err) {
         setError("Error fetching isochrones: " + err.message);
       } finally {
