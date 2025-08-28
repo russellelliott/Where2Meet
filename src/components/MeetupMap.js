@@ -205,8 +205,8 @@ function MeetupMap() {
       }
       // Calculate time budgets with more generous buffers
       // Use 60% of total travel time + 20 minute buffer to ensure overlap
-      const baseTimeBudget = Math.ceil(travelTime * 0.6);
-      const bufferTime = 1200; // 20 minutes in seconds
+      const baseTimeBudget = Math.ceil(travelTime * 0.5); //reduced from 0.6
+      const bufferTime = 900; // 20 minutes in seconds //reduced from 1200
       const timeBudget = baseTimeBudget + bufferTime;
 
       // Add mode=driving parameter and timeUnit=second for more accurate results
